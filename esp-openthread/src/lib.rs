@@ -6,14 +6,13 @@ mod platform;
 mod radio;
 mod timer;
 
+use bitflags::bitflags;
 use core::{
     borrow::BorrowMut,
     cell::RefCell,
     marker::{PhantomData, PhantomPinned},
     pin::Pin,
 };
-
-use bitflags::bitflags;
 use critical_section::Mutex;
 use esp_hal::systimer::{Alarm, Target};
 use esp_ieee802154::{rssi_to_lqi, Ieee802154};
@@ -29,8 +28,8 @@ use esp_openthread_sys::bindings::otPlatRadioReceiveDone;
 use no_std_net::Ipv6Addr;
 use sys::{
     bindings::{
-        __BindgenBitfieldUnit, otChangedFlags, otDatasetSetActive, otError_OT_ERROR_NONE,
-        otExtendedPanId, otInstance, otInstanceInitSingle, otIp6Address,
+        __BindgenBitfieldUnit, otChangedFlags, otDatasetGetActive, otDatasetSetActive,
+        otError_OT_ERROR_NONE, otExtendedPanId, otInstance, otInstanceInitSingle, otIp6Address,
         otIp6Address__bindgen_ty_1, otIp6GetUnicastAddresses, otIp6SetEnabled, otMeshLocalPrefix,
         otMessage, otMessageAppend, otMessageFree, otMessageGetLength, otMessageInfo,
         otMessageRead, otNetifIdentifier_OT_NETIF_THREAD, otNetworkKey, otNetworkName,
@@ -573,6 +572,50 @@ impl<'a> OpenThread<'a> {
                 RCV_FRAME.mInfo.mRxInfo.mTimestamp = current_millis() * 1000;
                 otPlatRadioReceiveDone(self.instance, &mut RCV_FRAME, otError_OT_ERROR_NONE);
             }
+        }
+    }
+
+    pub fn get_active_dataset(&self) -> Result<otOperationalDataset, Error> {
+        let mut dataset = otOperationalDataset {
+            mActiveTimestamp: otTimestamp {
+                mSeconds: 0,
+                mTicks: 0,
+                mAuthoritative: false,
+            },
+            mPendingTimestamp: otTimestamp {
+                mSeconds: 0,
+                mTicks: 0,
+                mAuthoritative: false,
+            },
+            mNetworkKey: otNetworkKey { m8: [0u8; 16] },
+            mNetworkName: otNetworkName { m8: [0i8; 17] },
+            mExtendedPanId: otExtendedPanId { m8: [0u8; 8] },
+            mMeshLocalPrefix: otMeshLocalPrefix { m8: [0u8; 8] },
+            mDelay: 0,
+            mPanId: 0,
+            mChannel: 0,
+            mPskc: otPskc { m8: [0u8; 16] },
+            mSecurityPolicy: otSecurityPolicy {
+                mRotationTime: 0,
+                _bitfield_align_1: [0u8; 0],
+                _bitfield_1: otSecurityPolicy::new_bitfield_1(
+                    false, false, false, false, false, false, false, false, false, 0,
+                ),
+            },
+            mChannelMask: 0,
+            mComponents: otOperationalDatasetComponents {
+                _bitfield_align_1: [0u8; 0],
+                _bitfield_1: otOperationalDatasetComponents::new_bitfield_1(
+                    true, false, true, true, true, false, false, true, true, false, false, false,
+                ),
+            },
+        };
+        let dataset_ptr = &mut dataset;
+        let success = unsafe { otDatasetGetActive(self.instance, dataset_ptr) };
+
+        match success {
+            0 => Ok(dataset),
+            _ => Err(Error::InternalError(success)),
         }
     }
 }
