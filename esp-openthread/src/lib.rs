@@ -7,7 +7,6 @@ mod radio;
 mod timer;
 
 use bitflags::bitflags;
-use heapless::Vec;
 use core::{
     borrow::BorrowMut,
     cell::RefCell,
@@ -30,15 +29,15 @@ use no_std_net::Ipv6Addr;
 use sys::{
     bindings::{
         __BindgenBitfieldUnit, otChangedFlags, otDatasetGetActive, otDatasetSetActive,
-        otError_OT_ERROR_NONE, otExtendedPanId, otInstance, otInstanceInitSingle, otIp6Address,
-        otIp6Address__bindgen_ty_1, otIp6GetUnicastAddresses, otIp6SetEnabled, otMeshLocalPrefix,
-        otMessage, otMessageAppend, otMessageFree, otMessageGetLength, otMessageInfo,
-        otMessageRead, otNetifIdentifier_OT_NETIF_THREAD, otNetworkKey, otNetworkName,
-        otOperationalDataset, otOperationalDatasetComponents, otPskc, otRadioFrame,
+        otDeviceRole, otError_OT_ERROR_NONE, otExtendedPanId, otInstance, otInstanceInitSingle,
+        otIp6Address, otIp6Address__bindgen_ty_1, otIp6GetUnicastAddresses, otIp6SetEnabled,
+        otMeshLocalPrefix, otMessage, otMessageAppend, otMessageFree, otMessageGetLength,
+        otMessageInfo, otMessageRead, otNetifIdentifier_OT_NETIF_THREAD, otNetworkKey,
+        otNetworkName, otOperationalDataset, otOperationalDatasetComponents, otPskc, otRadioFrame,
         otRadioFrame__bindgen_ty_1, otRadioFrame__bindgen_ty_1__bindgen_ty_2, otSecurityPolicy,
         otSetStateChangedCallback, otSockAddr, otTaskletsArePending, otTaskletsProcess,
-        otThreadSetEnabled, otTimestamp, otUdpBind, otUdpClose, otUdpNewMessage, otUdpOpen,
-        otUdpSend, otUdpSocket,
+        otThreadGetDeviceRole, otThreadSetEnabled, otTimestamp, otUdpBind, otUdpClose,
+        otUdpNewMessage, otUdpOpen, otUdpSend, otUdpSocket,
     },
     c_types::c_void,
 };
@@ -239,6 +238,27 @@ struct NetworkSettings {
     short_address: u16,
     pan_id: u16,
     channel: u8,
+}
+#[derive(Debug)]
+pub enum ThreadDeviceRole {
+    Leader,
+    Child,
+    Router,
+    Detached,
+    Disabled,
+}
+
+impl ThreadDeviceRole {
+    pub fn from_u32(role_u32: u32) -> Option<ThreadDeviceRole> {
+        match role_u32 {
+            0 => Some(ThreadDeviceRole::Detached),
+            1 => Some(ThreadDeviceRole::Disabled),
+            2 => Some(ThreadDeviceRole::Child),
+            3 => Some(ThreadDeviceRole::Router),
+            4 => Some(ThreadDeviceRole::Leader),
+            _ => None,
+        }
+    }
 }
 
 /// Instance of OpenThread
@@ -576,7 +596,6 @@ impl<'a> OpenThread<'a> {
         }
     }
 
-    
     /// Returns the currently active Dataset.
     pub fn get_active_dataset(&self) -> Result<OperationalDataset, Error> {
         let mut dataset = otOperationalDataset {
@@ -621,7 +640,25 @@ impl<'a> OpenThread<'a> {
             _ => Err(Error::InternalError(success)),
         }
     }
-}
+
+    /// Get the device role.
+    pub fn get_role(&self) -> Option<ThreadDeviceRole> {
+        let role_raw = unsafe { otThreadGetDeviceRole(self.instance) };
+        ThreadDeviceRole::from_u32(role_raw)
+    }
+
+    /// Convert the devico role to human-readable string.
+    pub fn device_role_to_string(&self, role: ThreadDeviceRole) -> &str {
+        match role {
+            ThreadDeviceRole::Leader => "leader",
+            ThreadDeviceRole::Child => "child",
+            ThreadDeviceRole::Router => "router",
+            ThreadDeviceRole::Detached => "detached",
+            ThreadDeviceRole::Disabled => "disabled",
+        }
+    }
+
+    }
 
 impl<'a> Drop for OpenThread<'a> {
     fn drop(&mut self) {
@@ -649,15 +686,13 @@ fn dataset_from_raw_dataset(raw_dataset: otOperationalDataset) -> OperationalDat
     dataset.extended_pan_id = Some(raw_dataset.mExtendedPanId.m8);
     dataset.mesh_local_prefix = Some(raw_dataset.mMeshLocalPrefix.m8);
     dataset.network_key = Some(raw_dataset.mNetworkKey.m8);
-    let name_as_u8: [u8; 17]; 
-    let mut name_as_vec = Vec::<u8, 16>::new();
+    let name_as_u8: [u8; 17];
+    let mut name_as_vec = heapless::Vec::<u8, 16>::new();
     unsafe {
         name_as_u8 = core::mem::transmute(raw_dataset.mNetworkName.m8);
     };
     // 15 = remove the null char
-    if let Ok(()) = name_as_vec.extend_from_slice(&name_as_u8[..15]) {
-        
-    }
+    if let Ok(()) = name_as_vec.extend_from_slice(&name_as_u8[..15]) {}
 
     if let Ok(network_name) = heapless::String::from_utf8(name_as_vec) {
         dataset.network_name = Some(network_name);
@@ -673,10 +708,14 @@ fn dataset_from_raw_dataset(raw_dataset: otOperationalDataset) -> OperationalDat
     dataset.security_policy = Some(SecurityPolicy {
         rotation_time: raw_dataset.mSecurityPolicy.mRotationTime,
         autonomous_enrollment_enabled: raw_dataset.mSecurityPolicy.mAutonomousEnrollmentEnabled(),
-        commercial_commissioning_enabled: raw_dataset.mSecurityPolicy.mCommercialCommissioningEnabled(),
+        commercial_commissioning_enabled: raw_dataset
+            .mSecurityPolicy
+            .mCommercialCommissioningEnabled(),
         external_commissioning_enabled: raw_dataset.mSecurityPolicy.mExternalCommissioningEnabled(),
         native_commissioning_enabled: raw_dataset.mSecurityPolicy.mNativeCommissioningEnabled(),
-        network_key_provisioning_enabled: raw_dataset.mSecurityPolicy.mNetworkKeyProvisioningEnabled(),
+        network_key_provisioning_enabled: raw_dataset
+            .mSecurityPolicy
+            .mNetworkKeyProvisioningEnabled(),
         non_ccm_routers_enabled: raw_dataset.mSecurityPolicy.mNonCcmRoutersEnabled(),
         obtain_network_key_enabled: raw_dataset.mSecurityPolicy.mObtainNetworkKeyEnabled(),
         routers_enabled: raw_dataset.mSecurityPolicy.mRoutersEnabled(),
