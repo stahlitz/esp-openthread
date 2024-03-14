@@ -7,6 +7,7 @@ mod radio;
 mod timer;
 
 use bitflags::bitflags;
+use heapless::Vec;
 use core::{
     borrow::BorrowMut,
     cell::RefCell,
@@ -575,7 +576,9 @@ impl<'a> OpenThread<'a> {
         }
     }
 
-    pub fn get_active_dataset(&self) -> Result<otOperationalDataset, Error> {
+    
+    /// Returns the currently active Dataset.
+    pub fn get_active_dataset(&self) -> Result<OperationalDataset, Error> {
         let mut dataset = otOperationalDataset {
             mActiveTimestamp: otTimestamp {
                 mSeconds: 0,
@@ -614,7 +617,7 @@ impl<'a> OpenThread<'a> {
         let success = unsafe { otDatasetGetActive(self.instance, dataset_ptr) };
 
         match success {
-            0 => Ok(dataset),
+            0 => Ok(dataset_from_raw_dataset(dataset)),
             _ => Err(Error::InternalError(success)),
         }
     }
@@ -628,6 +631,58 @@ impl<'a> Drop for OpenThread<'a> {
             CHANGE_CALLBACK.borrow_ref_mut(cs).take();
         });
     }
+}
+
+/// Create a new OperationalDataset struct from a raw otOperationalDataset struct.
+fn dataset_from_raw_dataset(raw_dataset: otOperationalDataset) -> OperationalDataset {
+    let mut dataset = OperationalDataset::default();
+
+    dataset.active_timestamp = Some(ThreadTimestamp {
+        seconds: raw_dataset.mActiveTimestamp.mSeconds,
+        ticks: raw_dataset.mActiveTimestamp.mTicks,
+        authoritative: raw_dataset.mActiveTimestamp.mAuthoritative,
+    });
+
+    dataset.channel = Some(raw_dataset.mChannel);
+    dataset.channel_mask = Some(raw_dataset.mChannelMask);
+    dataset.delay = Some(raw_dataset.mDelay);
+    dataset.extended_pan_id = Some(raw_dataset.mExtendedPanId.m8);
+    dataset.mesh_local_prefix = Some(raw_dataset.mMeshLocalPrefix.m8);
+    dataset.network_key = Some(raw_dataset.mNetworkKey.m8);
+    // let name_no_null: &[i8; 17] = &raw_dataset.mNetworkName.m8;
+    let name_as_u8: [u8; 17]; 
+    let mut name_as_vec = Vec::<u8, 16>::new();
+    unsafe {
+        name_as_u8 = core::mem::transmute(raw_dataset.mNetworkName.m8);
+    };
+    name_as_vec.extend_from_slice(&name_as_u8).unwrap();
+
+    if let Ok(network_name) = heapless::String::from_utf8(name_as_vec) {
+        dataset.network_name = Some(network_name);
+    }
+    dataset.pan_id = Some(raw_dataset.mPanId);
+    dataset.pending_timestamp = Some(ThreadTimestamp {
+        seconds: raw_dataset.mPendingTimestamp.mSeconds,
+        ticks: raw_dataset.mPendingTimestamp.mTicks,
+        authoritative: raw_dataset.mPendingTimestamp.mAuthoritative,
+    });
+
+    dataset.pskc = Some(raw_dataset.mPskc.m8);
+    dataset.security_policy = Some(SecurityPolicy {
+        rotation_time: raw_dataset.mSecurityPolicy.mRotationTime,
+        autonomous_enrollment_enabled: raw_dataset.mSecurityPolicy.mAutonomousEnrollmentEnabled(),
+        commercial_commissioning_enabled: raw_dataset.mSecurityPolicy.mCommercialCommissioningEnabled(),
+        external_commissioning_enabled: raw_dataset.mSecurityPolicy.mExternalCommissioningEnabled(),
+        native_commissioning_enabled: raw_dataset.mSecurityPolicy.mNativeCommissioningEnabled(),
+        network_key_provisioning_enabled: raw_dataset.mSecurityPolicy.mNetworkKeyProvisioningEnabled(),
+        non_ccm_routers_enabled: raw_dataset.mSecurityPolicy.mNonCcmRoutersEnabled(),
+        obtain_network_key_enabled: raw_dataset.mSecurityPolicy.mObtainNetworkKeyEnabled(),
+        routers_enabled: raw_dataset.mSecurityPolicy.mRoutersEnabled(),
+        toble_link_enabled: raw_dataset.mSecurityPolicy.mTobleLinkEnabled(),
+        version_threshold_for_routing: raw_dataset.mSecurityPolicy.mVersionThresholdForRouting(),
+    });
+
+    dataset
 }
 
 unsafe extern "C" fn change_callback(
