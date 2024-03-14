@@ -649,13 +649,15 @@ fn dataset_from_raw_dataset(raw_dataset: otOperationalDataset) -> OperationalDat
     dataset.extended_pan_id = Some(raw_dataset.mExtendedPanId.m8);
     dataset.mesh_local_prefix = Some(raw_dataset.mMeshLocalPrefix.m8);
     dataset.network_key = Some(raw_dataset.mNetworkKey.m8);
-    // let name_no_null: &[i8; 17] = &raw_dataset.mNetworkName.m8;
     let name_as_u8: [u8; 17]; 
     let mut name_as_vec = Vec::<u8, 16>::new();
     unsafe {
         name_as_u8 = core::mem::transmute(raw_dataset.mNetworkName.m8);
     };
-    name_as_vec.extend_from_slice(&name_as_u8).unwrap();
+    // 15 = remove the null char
+    if let Ok(()) = name_as_vec.extend_from_slice(&name_as_u8[..15]) {
+        
+    }
 
     if let Ok(network_name) = heapless::String::from_utf8(name_as_vec) {
         dataset.network_name = Some(network_name);
