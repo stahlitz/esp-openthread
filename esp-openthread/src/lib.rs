@@ -29,7 +29,7 @@ use no_std_net::Ipv6Addr;
 use sys::{
     bindings::{
         __BindgenBitfieldUnit, otChangedFlags, otDatasetGetActive, otDatasetSetActive,
-        otDeviceRole, otError_OT_ERROR_NONE, otExtendedPanId, otInstance, otInstanceInitSingle,
+        otError_OT_ERROR_NONE, otExtendedPanId, otInstance, otInstanceInitSingle,
         otIp6Address, otIp6Address__bindgen_ty_1, otIp6GetUnicastAddresses, otIp6SetEnabled,
         otMeshLocalPrefix, otMessage, otMessageAppend, otMessageFree, otMessageGetLength,
         otMessageInfo, otMessageRead, otNetifIdentifier_OT_NETIF_THREAD, otNetworkKey,
