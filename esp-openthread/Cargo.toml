@@ -13,7 +13,7 @@ bitflags = "2.4.0"
 heapless = "0.8.0"
 no-std-net = "0.6.0"
 
-esp-hal = { version = "0.8.0", features = ["esp32c6", "esp32h2"] }
+esp-hal = "0.16.1"
 
 [features]
 esp32c6 = [ "esp-ieee802154/esp32c6", "esp-hal/esp32c6"]
