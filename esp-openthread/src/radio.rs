@@ -250,7 +250,7 @@ pub extern "C" fn otPlatRadioTransmit(
             frame.mLength as usize,
         ));
         SENT_FRAME = *frame;
-        SENT_FRAME.mPsdu = &mut SENT_FRAME_PSDU as *mut u8;
+        SENT_FRAME.mPsdu = addr_of_mut!(SENT_FRAME_PSDU)  as *mut u8;
 
         otPlatRadioTxStarted(instance as *mut otInstance, core::mem::transmute(frame));
     }
