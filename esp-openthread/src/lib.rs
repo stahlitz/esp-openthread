@@ -12,15 +12,11 @@ use core::{
     cell::RefCell,
     marker::{PhantomData, PhantomPinned},
     pin::Pin,
+    ptr::addr_of_mut
 };
 use critical_section::Mutex;
 use esp_hal::systimer::{Alarm, Target};
 use esp_ieee802154::{rssi_to_lqi, Ieee802154};
-
-#[cfg(feature = "esp32c6")]
-use esp32c6_hal as esp_hal;
-#[cfg(feature = "esp32h2")]
-use esp32h2_hal as esp_hal;
 
 // for now just re-export all
 pub use esp_openthread_sys as sys;
@@ -53,7 +49,7 @@ static CHANGE_CALLBACK: Mutex<RefCell<Option<&'static mut (dyn FnMut(ChangedFlag
 
 static mut RCV_FRAME_PSDU: [u8; 127] = [0u8; 127];
 static mut RCV_FRAME: otRadioFrame = otRadioFrame {
-    mPsdu: unsafe { &mut RCV_FRAME_PSDU as *mut u8 },
+    mPsdu: unsafe {addr_of_mut!(RCV_FRAME_PSDU) as *mut u8 },
     mLength: 0,
     mChannel: 0,
     mRadioType: 0,
@@ -591,7 +587,7 @@ impl<'a> OpenThread<'a> {
                 RCV_FRAME.mInfo.mRxInfo.mRssi = rssi;
                 RCV_FRAME.mInfo.mRxInfo.mLqi = rssi_to_lqi(rssi);
                 RCV_FRAME.mInfo.mRxInfo.mTimestamp = current_millis() * 1000;
-                otPlatRadioReceiveDone(self.instance, &mut RCV_FRAME, otError_OT_ERROR_NONE);
+                otPlatRadioReceiveDone(self.instance, addr_of_mut!(RCV_FRAME), otError_OT_ERROR_NONE);
             }
         }
     }

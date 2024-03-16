@@ -5,11 +5,13 @@ use esp_openthread_sys::bindings::{
     otRadioFrame__bindgen_ty_1__bindgen_ty_1,
 };
 
+use core::ptr::addr_of_mut;
+
 use crate::{get_settings, platform::CURRENT_INSTANCE, set_settings, with_radio, NetworkSettings};
 
 pub static mut PSDU: [u8; 127] = [0u8; 127];
 pub static mut TRANSMIT_BUFFER: otRadioFrame = otRadioFrame {
-    mPsdu: unsafe { &mut PSDU as *mut u8 },
+    mPsdu: unsafe { addr_of_mut!(PSDU) as *mut u8 },
     mLength: 0,
     mChannel: 0,
     mRadioType: 0,
@@ -30,7 +32,7 @@ pub static mut TRANSMIT_BUFFER: otRadioFrame = otRadioFrame {
 
 pub static mut SENT_FRAME_PSDU: [u8; 127] = [0u8; 127];
 static mut SENT_FRAME: otRadioFrame = otRadioFrame {
-    mPsdu: unsafe { &mut SENT_FRAME_PSDU as *mut u8 },
+    mPsdu: unsafe { addr_of_mut!(SENT_FRAME_PSDU) as *mut u8 },
     mLength: 0,
     mChannel: 0,
     mRadioType: 0,
@@ -63,7 +65,7 @@ pub extern "C" fn otPlatRadioGetCaps(instance: *const otInstance) -> u8 {
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetTransmitBuffer(instance: *const otInstance) -> *mut otRadioFrame {
     log::info!("otPlatRadioGetTransmitBuffer {:p}", instance);
-    unsafe { &mut TRANSMIT_BUFFER as *mut _ as *mut otRadioFrame }
+    unsafe { addr_of_mut!(TRANSMIT_BUFFER) as *mut _ as *mut otRadioFrame }
 }
 
 #[no_mangle]
@@ -293,7 +295,7 @@ pub(crate) fn trigger_tx_done() {
     unsafe {
         otPlatRadioTxDone(
             CURRENT_INSTANCE as *mut otInstance,
-            &mut SENT_FRAME as *mut otRadioFrame,
+            addr_of_mut!(SENT_FRAME ) as *mut otRadioFrame,
             core::ptr::null_mut(), // where to get this from?
             otError_OT_ERROR_NONE,
         );

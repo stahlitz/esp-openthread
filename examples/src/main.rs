@@ -13,7 +13,7 @@ use esp_openthread::NetworkInterfaceUnicastAddress;
 use esp_openthread::OperationalDataset;
 use esp_openthread::ThreadTimestamp;
 use esp_println::println;
-use hal::{clock::ClockControl, peripherals::Peripherals, prelude::*, systimer, Rng};
+use esp_hal::{clock::ClockControl, peripherals::Peripherals, prelude::*, systimer, Rng};
 
 #[entry]
 fn main() -> ! {
