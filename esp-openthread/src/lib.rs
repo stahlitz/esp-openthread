@@ -11,8 +11,9 @@ use core::{
     borrow::BorrowMut,
     cell::RefCell,
     marker::{PhantomData, PhantomPinned},
+    mem::transmute,
     pin::Pin,
-    ptr::addr_of_mut
+    ptr::addr_of_mut,
 };
 use critical_section::Mutex;
 use esp_hal::systimer::{Alarm, Target};
@@ -24,16 +25,7 @@ use esp_openthread_sys::bindings::otPlatRadioReceiveDone;
 use no_std_net::Ipv6Addr;
 use sys::{
     bindings::{
-        __BindgenBitfieldUnit, otChangedFlags, otDatasetGetActive, otDatasetSetActive,
-        otError_OT_ERROR_NONE, otExtendedPanId, otInstance, otInstanceInitSingle,
-        otIp6Address, otIp6Address__bindgen_ty_1, otIp6GetUnicastAddresses, otIp6SetEnabled,
-        otMeshLocalPrefix, otMessage, otMessageAppend, otMessageFree, otMessageGetLength,
-        otMessageInfo, otMessageRead, otNetifIdentifier_OT_NETIF_THREAD, otNetworkKey,
-        otNetworkName, otOperationalDataset, otOperationalDatasetComponents, otPskc, otRadioFrame,
-        otRadioFrame__bindgen_ty_1, otRadioFrame__bindgen_ty_1__bindgen_ty_2, otSecurityPolicy,
-        otSetStateChangedCallback, otSockAddr, otTaskletsArePending, otTaskletsProcess,
-        otThreadGetDeviceRole, otThreadSetEnabled, otTimestamp, otUdpBind, otUdpClose,
-        otUdpNewMessage, otUdpOpen, otUdpSend, otUdpSocket,
+        __BindgenBitfieldUnit, otChangedFlags, otDatasetGetActive, otDatasetSetActive, otError_OT_ERROR_NONE, otExtendedPanId, otInstance, otInstanceInitSingle, otIp6AddUnicastAddress, otIp6Address, otIp6AddressFromString, otIp6Address__bindgen_ty_1, otIp6GetUnicastAddresses, otIp6SetEnabled, otMeshLocalPrefix, otMessage, otMessageAppend, otMessageFree, otMessageGetLength, otMessageInfo, otMessageRead, otNetifAddress, otNetifIdentifier_OT_NETIF_THREAD, otNetworkKey, otNetworkName, otOperationalDataset, otOperationalDatasetComponents, otPskc, otRadioFrame, otRadioFrame__bindgen_ty_1, otRadioFrame__bindgen_ty_1__bindgen_ty_2, otSecurityPolicy, otSetStateChangedCallback, otSockAddr, otTaskletsArePending, otTaskletsProcess, otThreadGetDeviceRole, otThreadSetEnabled, otTimestamp, otUdpBind, otUdpClose, otUdpNewMessage, otUdpOpen, otUdpSend, otUdpSocket
     },
     c_types::c_void,
 };
@@ -49,7 +41,7 @@ static CHANGE_CALLBACK: Mutex<RefCell<Option<&'static mut (dyn FnMut(ChangedFlag
 
 static mut RCV_FRAME_PSDU: [u8; 127] = [0u8; 127];
 static mut RCV_FRAME: otRadioFrame = otRadioFrame {
-    mPsdu: unsafe {addr_of_mut!(RCV_FRAME_PSDU) as *mut u8 },
+    mPsdu: unsafe { addr_of_mut!(RCV_FRAME_PSDU) as *mut u8 },
     mLength: 0,
     mChannel: 0,
     mRadioType: 0,
@@ -587,7 +579,11 @@ impl<'a> OpenThread<'a> {
                 RCV_FRAME.mInfo.mRxInfo.mRssi = rssi;
                 RCV_FRAME.mInfo.mRxInfo.mLqi = rssi_to_lqi(rssi);
                 RCV_FRAME.mInfo.mRxInfo.mTimestamp = current_millis() * 1000;
-                otPlatRadioReceiveDone(self.instance, addr_of_mut!(RCV_FRAME), otError_OT_ERROR_NONE);
+                otPlatRadioReceiveDone(
+                    self.instance,
+                    addr_of_mut!(RCV_FRAME),
+                    otError_OT_ERROR_NONE,
+                );
             }
         }
     }
@@ -643,7 +639,7 @@ impl<'a> OpenThread<'a> {
         ThreadDeviceRole::from_u32(role_raw)
     }
 
-    /// Convert the devico role to human-readable string.
+    /// Convert the device role to a human-readable string.
     pub fn device_role_to_string(&self, role: ThreadDeviceRole) -> &str {
         match role {
             ThreadDeviceRole::Leader => "leader",
@@ -653,8 +649,17 @@ impl<'a> OpenThread<'a> {
             ThreadDeviceRole::Disabled => "disabled",
         }
     }
+    /// Adds a Network Interface Address to the Thread interface. 
+    /// The passed-in instance aAddress is copied by the Thread interface. 
+    /// The Thread interface only supports a fixed number of externally added unicast addresses.
+    pub fn thread_ip6_add_unicast_address(&self, address: Ipv6Addr) -> Result<(), Error> {
+        let ot_address_raw = ot_netif_address_from_ipv6_addr(address);
 
+        checked!(unsafe {
+            otIp6AddUnicastAddress(self.instance, &ot_address_raw)
+        })
     }
+}
 
 impl<'a> Drop for OpenThread<'a> {
     fn drop(&mut self) {
@@ -720,6 +725,25 @@ fn dataset_from_raw_dataset(raw_dataset: otOperationalDataset) -> OperationalDat
     });
 
     dataset
+}
+/// Create a otNetIfAddress from a Ipv6Addr
+fn ot_netif_address_from_ipv6_addr(address: Ipv6Addr) -> otNetifAddress {
+    let seg_big_endian = address.segments().map(|s| s.to_be());
+    let addr_out = otNetifAddress {
+        mAddress: otIp6Address {
+            mFields: otIp6Address__bindgen_ty_1 {
+                m16: seg_big_endian
+            },
+        },
+        //Values from the cli.cpp "ipaddr add"
+        mPrefixLength: 64,
+        //OT_ADDRESS_ORIGIN_MANUAL
+        mAddressOrigin: 3,
+        _bitfield_align_1: [],
+        _bitfield_1: __BindgenBitfieldUnit::new([0u8; 1]),
+        mNext: core::ptr::null_mut() as *mut otNetifAddress,
+    };
+    addr_out
 }
 
 unsafe extern "C" fn change_callback(
